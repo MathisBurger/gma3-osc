@@ -7,3 +7,4 @@ edition = "2021"
 
 [dependencies]
 rosc = "~0.10"
+serialport = "4.2.1"
