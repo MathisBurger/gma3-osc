@@ -11,13 +11,8 @@ use serialport;
 
 
 fn main() {
-    let args: Vec<String> = env::args().collect();
-    let usage = format!(
-        "Usage: {} HOST_IP:HOST_PORT CLIENT_IP:CLIENT_PORT",
-        &args[0]
-    );
-    let sock = UdpSocket::bind("127.0.0.1:9107").unwrap();
-    let mut serial_port = serialport::new("/dev/cu.usbmodem2123201", 9600)
+    let sock = UdpSocket::bind("192.168.178.104:8003").unwrap();
+    let mut serial_port = serialport::new("/dev/cu.usbmodem212301", 9600)
         .timeout(Duration::from_millis(1000))
         .open()
         .expect("Failed to open serial port");
@@ -25,25 +20,22 @@ fn main() {
     let output = "This is a test.\n".as_bytes();
     serial_port.write(output).expect("Write failed!");
     serial_port.flush().unwrap();
-    let mut to_addr = String::from("127.0.0.1:9104");
-    let mut buf = [0u8; rosc::decoder::MTU];
-
+    let mut to_addr = String::from("192.168.178.104:8001");
+    let mut reader = BufReader::new(&mut serial_port);
+    let mut my_str = String::new();
     loop {
-        /*match sock.recv_from(&mut buf) {
-            Ok((size, addr)) => {
-                println!("Received packet with size {} from: {}", size, addr);
-                let (_, packet) = rosc::decoder::decode_udp(&buf[..size]).unwrap();
-                handle_packet(packet);
-            }
-            Err(e) => {
-                println!("Error receiving from socket: {}", e);
-                break;
-            }
-        }*/
-        //let mut reader = BufReader::new(&mut serial_port);
-        //let mut my_str = String::new();
-        //reader.read_line(&mut my_str).unwrap();
-        sock.send("/cmd,s,FaderMaster Page 1.402 At 100".as_bytes()).unwrap();
+
+        reader.read_line(&mut my_str).unwrap();
+        trim_newline(&mut my_str);
+        let fader_value: i32 = my_str.parse().unwrap();
+        println!("{}", fader_value);
+        my_str = String::new();
+        let msg_buf = encoder::encode(&OscPacket::Message(OscMessage {
+            addr: "/Page1/Fader403".to_string(),
+            args: vec![OscType::Int(fader_value)],
+        }))
+            .unwrap();
+        sock.send_to(&msg_buf, &to_addr).unwrap();
     }
 }
 
@@ -55,6 +47,15 @@ fn handle_packet(packet: OscPacket) {
         }
         OscPacket::Bundle(bundle) => {
             println!("OSC Bundle: {:?}", bundle);
+        }
+    }
+}
+
+fn trim_newline(s: &mut String) {
+    if s.ends_with('\n') {
+        s.pop();
+        if s.ends_with('\r') {
+            s.pop();
         }
     }
 }
